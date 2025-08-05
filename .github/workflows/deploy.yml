@@ -1,0 +1,35 @@
+name: CI/CD Moodle Deployment
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout du dépôt
+      uses: actions/checkout@v3
+
+    - name: Connexion à DockerHub
+      run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+
+    - name: Build de l’image Moodle
+      run: |
+        docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/moodle:latest .
+
+    - name: Push de l’image Moodle
+      run: |
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/moodle:latest
+
+    - name: Déploiement sur le serveur distant via SSH
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/moodle:latest
+          docker stop moodle || true && docker rm moodle || true
+          docker run -d --name moodle -p 80:80 ${{ secrets.DOCKERHUB_USERNAME }}/moodle:latest
